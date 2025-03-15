@@ -75,6 +75,7 @@
 
     <script>
       const numbersArr = Array.from(document.getElementsByClassName("number"));
+      const decimalArr = Array.from(document.getElementsByClassName("decimal"));
       const operatorsArr = Array.from(document.getElementsByClassName("operator"));
       const parenthesisArr = Array.from(document.getElementsByClassName("parenthesis"));
       const numberStrs = "0123456789".split("");
@@ -82,72 +83,172 @@
       const data = {
         displayString: "0",
         appendStringNum: (newChar) => {
+          const tokens = data.displayString.split(/[\+\-\*\/\(\)]/);
+          const lastNum = tokens[tokens.length - 1];
           if (newChar === ".") {
-            //decimal + 0?
-          }
-
-          if (numberStrs.includes(newChar)) {
-            if (data.displayString === "0") {
-              data.displayString = "";
+            if (lastNum.includes(".")) return;
+            if (lastNum === "") {
+              data.displayString += "0";
             }
-            data.displayString += newChar;
           }
+          if (data.displayString === "0" && newChar !== ".") {
+            data.displayString = "";
+          }
+          data.displayString += newChar;
           data.updateDisplay();
         },
-
         appendStringOperator: (newChar) => {
           if (numberStrs.includes(data.displayString.slice(-1)) || data.displayString.slice(-1) === ")") {
             data.displayString += newChar;
           }
           data.updateDisplay();
         },
-
         appendStringParenthesis: (newChar) => {
           if (newChar === ")") {
-            if (data.displayString.split("(").length <= data.displayString.split(")").length) {
-              //if there are not enough open parenthesis to add a closing parenthesis terminate early
-              return;
-            }
-            if (operatorsArr.map((operator) => operator.innerText).includes(data.displayString[data.displayString.length - 1])) {
-              //early termination for adding parenthesis after operator
-              return;
-            }
+            if (data.displayString.split("(").length <= data.displayString.split(")").length) return;
+            if (operatorsArr.map((operator) => operator.innerText).includes(data.displayString.slice(-1))) return;
           }
           if (data.displayString === "0") {
             data.displayString = "";
-            data.displayString += newChar;
-            return;
           }
-
           data.displayString += newChar;
-
           data.updateDisplay();
         },
         updateDisplay: () => {
-          const display = document.getElementById("display");
-          display.innerText = data.displayString;
+          document.getElementById("display").innerText = data.displayString;
         },
       };
 
-      const display = document.getElementById("display");
-      display.innerText = data.displayString;
+      document.getElementById("display").innerText = data.displayString;
 
-      numbersArr.map((elem, i) => {
-        elem.addEventListener("click", (evt) => {
+      numbersArr.forEach((elem) => {
+        elem.addEventListener("click", () => {
           data.appendStringNum(elem.innerText);
         });
       });
 
-      operatorsArr.map((elem, i) => {
-        elem.addEventListener("click", (evt) => {
+      decimalArr.forEach((elem) => {
+        elem.addEventListener("click", () => {
+          data.appendStringNum(elem.innerText);
+        });
+      });
+
+      operatorsArr.forEach((elem) => {
+        elem.addEventListener("click", () => {
           data.appendStringOperator(elem.innerText);
         });
       });
 
-      parenthesisArr.map((elem, i) => {
-        elem.addEventListener("click", (evt) => {
+      parenthesisArr.forEach((elem) => {
+        elem.addEventListener("click", () => {
           data.appendStringParenthesis(elem.innerText);
         });
+      });
+
+      class Node {
+        constructor(val = null, left = null, right = null) {
+          this.val = val;
+          this.left = left;
+          this.right = right;
+        }
+      }
+
+      function infixToPostfix(tokens) {
+        const stack = [];
+        const output = [];
+        const precedence = { "+": 1, "-": 1, "*": 2, "/": 2 };
+
+        tokens.forEach((token) => {
+          if (Number.isFinite(Number(token))) {
+            output.push(token);
+          } else if (token === "(") {
+            stack.push(token);
+          } else if (token === ")") {
+            while (stack.length && stack[stack.length - 1] !== "(") {
+              output.push(stack.pop());
+            }
+            stack.pop();
+          } else {
+            while (stack.length && precedence[stack[stack.length - 1]] >= precedence[token]) {
+              output.push(stack.pop());
+            }
+            stack.push(token);
+          }
+        });
+
+        while (stack.length) {
+          output.push(stack.pop());
+        }
+        return output;
+      }
+
+      function buildTreeFromPostfix(postfix) {
+        const stack = [];
+        postfix.forEach((token) => {
+          if (Number.isFinite(Number(token))) {
+            stack.push(new Node(token));
+          } else {
+            const right = stack.pop();
+            const left = stack.pop();
+            stack.push(new Node(token, left, right));
+          }
+        });
+        return stack.pop();
+      }
+
+      function evaluateExpression(node) {
+        if (!node.left && !node.right) {
+          return parseFloat(node.val);
+        }
+        var leftVal = evaluateExpression(node.left);
+        var rightVal = evaluateExpression(node.right);
+        if (node.val === "+") {
+          return leftVal + rightVal;
+        } else if (node.val === "-") {
+          return leftVal - rightVal;
+        } else if (node.val === "*") {
+          return leftVal * rightVal;
+        } else if (node.val === "/") {
+          return leftVal / rightVal;
+        }
+      }
+
+      function tokenize(str) {
+        let tokens = [];
+        let numberBuffer = "";
+        for (let i = 0; i < str.length; i++) {
+          let c = str[i];
+          if ("0123456789.".includes(c)) {
+            numberBuffer += c;
+          } else if ("+-*/()".includes(c)) {
+            if (numberBuffer !== "") {
+              tokens.push(numberBuffer);
+              numberBuffer = "";
+            }
+            tokens.push(c);
+          }
+        }
+        if (numberBuffer !== "") {
+          tokens.push(numberBuffer);
+        }
+        return tokens;
+      }
+
+      function evaluateDisplayString(str) {
+        const tokens = tokenize(str);
+        const postfix = infixToPostfix(tokens);
+        const root = buildTreeFromPostfix(postfix);
+        return evaluateExpression(root);
+      }
+
+      document.querySelector(".equals").addEventListener("click", () => {
+        try {
+          data.displayString = evaluateDisplayString(data.displayString).toString();
+          data.updateDisplay();
+        } catch {
+          data.displayString = "Error";
+          data.updateDisplay();
+        }
       });
     </script>
   </body>
